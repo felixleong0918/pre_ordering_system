@@ -113,7 +113,7 @@ export default function Staff() {
           </div>
 
           <div className="col">
-            <h2 className="sectionTitle">預點餐草稿</h2>
+         
             {!selectedQueueId && <div className="muted">尚未選擇號碼。</div>}
             {selectedQueueId && !order && <div className="muted">這位客人尚未預點餐。</div>}
             {order && (
