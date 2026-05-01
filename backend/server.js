@@ -3,6 +3,7 @@ const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'database', 'restaurant.db');
@@ -62,7 +63,7 @@ async function initDb() {
 }
 
 async function getActiveQueueByDevice(deviceToken) {
-  return get("SELECT * FROM queue WHERE deviceToken = ? AND status IN ('waiting','called') ORDER BY id DESC LIMIT 1", [deviceToken]);
+  return get("SELECT * FROM queue WHERE deviceToken = ? AND status IN ('waiting','called','skipped','seated') ORDER BY id DESC LIMIT 1", [deviceToken]);
 }
 
 async function getQueueDetail(queueId) {
@@ -116,10 +117,11 @@ app.post('/queue', async (req, res) => {
     const { deviceToken } = req.body;
     if (!deviceToken) return res.status(400).json({ error: '缺少裝置識別' });
 
-    const existing = await getActiveQueueByDevice(deviceToken);
-    if (existing) {
-      return res.status(409).json({ error: '此裝置目前已有尚未完成的號碼。', queue: existing });
-    }
+    // 註：測試模式下暫時取消同一裝置只能有一個未完成號碼的限制。
+    // const existing = await getActiveQueueByDevice(deviceToken);
+    // if (existing) {
+    //   return res.status(409).json({ error: '此裝置目前已有尚未完成的號碼。', queue: existing });
+    // }
 
     const row = await get('SELECT MAX(number) AS maxNumber FROM queue');
     const nextNumber = (row?.maxNumber || 0) + 1;
@@ -155,11 +157,37 @@ app.post('/queue/next', async (req, res) => {
   }
 });
 
+app.post('/queue/:id/skip', async (req, res) => {
+  try {
+    const queue = await get('SELECT * FROM queue WHERE id = ?', [req.params.id]);
+    if (!queue) return res.status(404).json({ error: '找不到號碼' });
+    if (queue.status === 'done') return res.status(400).json({ error: '號碼已完成，無法過號' });
+    await run("UPDATE queue SET status = 'skipped' WHERE id = ?", [req.params.id]);
+    const updated = await get('SELECT * FROM queue WHERE id = ?', [req.params.id]);
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ error: '過號操作失敗' });
+  }
+});
+
+app.post('/queue/:id/seat', async (req, res) => {
+  try {
+    const queue = await get('SELECT * FROM queue WHERE id = ?', [req.params.id]);
+    if (!queue) return res.status(404).json({ error: '找不到號碼' });
+    if (queue.status === 'done') return res.status(400).json({ error: '號碼已完成，無法確認入座' });
+    await run("UPDATE queue SET status = 'seated' WHERE id = ?", [req.params.id]);
+    const updated = await get('SELECT * FROM queue WHERE id = ?', [req.params.id]);
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ error: '確認入座失敗' });
+  }
+});
+
 app.post('/queue/clear', async (req, res) => {
   try {
     await run('DELETE FROM orders');
     await run('DELETE FROM queue');
-    res.json({ success: true, message: '今日 queue 與預點餐草稿已清空。' });
+    res.json({ success: true, message: '今日列隊清單與預點餐草稿已清空。' });
   } catch (e) {
     res.status(500).json({ error: '清空 queue 失敗' });
   }

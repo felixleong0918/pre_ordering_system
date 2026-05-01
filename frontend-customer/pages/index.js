@@ -13,16 +13,30 @@ function getDeviceToken() {
 }
 
 export default function Home() {
-  const [queueInfo, setQueueInfo] = useState({ current: null, waitingCount: 0 });
+  const [queueInfo, setQueueInfo] = useState({ current: null, waitingCount: 0, queue: [] });
   const [myQueue, setMyQueue] = useState(null);
   const [message, setMessage] = useState('');
   const [deviceToken, setDeviceToken] = useState('');
   const router = useRouter();
+  const TOTAL_TABLES = 10;
+  const ESTIMATED_DINING_MINUTES = 40;
+
+  const waitingBeforeCount = useMemo(() => {
+    if (!myQueue || myQueue.status !== 'waiting') return 0;
+    return queueInfo.queue.filter((item) => item.status === 'waiting' && item.number < myQueue.number).length;
+  }, [queueInfo.queue, myQueue]);
+
+  const estimatedWaitMinutes = useMemo(() => {
+    if (!waitingBeforeCount) return 0;
+    return Math.max(0, Math.ceil((waitingBeforeCount / TOTAL_TABLES) * ESTIMATED_DINING_MINUTES));
+  }, [waitingBeforeCount]);
 
   const statusText = useMemo(() => {
     if (!myQueue) return '尚未取號';
     if (myQueue.status === 'waiting') return '等待叫號中';
     if (myQueue.status === 'called') return '輪到你了';
+    if (myQueue.status === 'skipped') return '已過號';
+    if (myQueue.status === 'seated') return '已入座';
     return '本次號碼已完成';
   }, [myQueue]);
 
@@ -44,6 +58,10 @@ export default function Home() {
       setMyQueue(data.activeQueue || null);
       if (data.activeQueue?.status === 'called') {
         setMessage(`已叫到你的號碼 ${data.activeQueue.number}，請前往櫃台。`);
+      } else if (data.activeQueue?.status === 'skipped') {
+        setMessage(`你的號碼 ${data.activeQueue.number} 已被過號。`);
+      } else if (data.activeQueue?.status === 'seated') {
+        setMessage(`你的號碼 ${data.activeQueue.number} 已確認入座。`);
       }
     } catch {
       setMessage('目前無法同步你的號碼狀態。');
@@ -59,12 +77,13 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 409 && data.queue) {
-          setMyQueue(data.queue);
-          setMessage(`此裝置目前已有號碼 ${data.queue.number}。`);
-          await loadQueueBoard();
-          return;
-        }
+        // 目前已暫時允許同一裝置重複取號，方便測試前方等待與預估等待時間。
+        // if (res.status === 409 && data.queue) {
+        //   setMyQueue(data.queue);
+        //   setMessage(`此裝置目前已有號碼 ${data.queue.number}。`);
+        //   await loadQueueBoard();
+        //   return;
+        // }
         throw new Error(data.error || '取號失敗');
       }
       setMyQueue(data);
@@ -112,7 +131,11 @@ export default function Home() {
           </div>
           <div className="boardCard">
             <div className="boardLabel">前方等待</div>
-            <div className="boardValue">{myQueue?.status === 'waiting' && queueInfo.current ? Math.max(myQueue.number - queueInfo.current.number - 1, 0) : queueInfo.waitingCount}</div>
+            <div className="boardValue">{myQueue?.status === 'waiting' ? waitingBeforeCount : 0}組</div>
+          </div>
+          <div className="boardCard">
+            <div className="boardLabel">預計等待</div>
+            <div className="boardValue">{myQueue?.status === 'waiting' ? `${estimatedWaitMinutes} 分鐘` : '--'}</div>
           </div>
         </div>
 
