@@ -8,12 +8,15 @@ export default function Staff() {
   const [order, setOrder] = useState(null);
   const [message, setMessage] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+
+  const isCallNextDisabled = queueData.current?.status === 'called' || actionLoadingId !== null;
 
   async function loadQueue() {
     try {
       const res = await fetch(`${API}/queue`);
       const data = await res.json();
-      setQueueData(data);
+      setQueueData({ ...data, queue: data.queue.filter((item) => item.status !== 'skipped') });
     } catch {
       setMessage('無法取得隊列資料');
     }
@@ -23,11 +26,20 @@ export default function Staff() {
     try {
       const res = await fetch(`${API}/queue/next`, { method: 'POST' });
       const data = await res.json();
-      if (data.message) setMessage(data.message); else setMessage('已叫下一號');
+      if (data.message) {
+        setMessage(data.message);
+        await loadQueue();
+        setOrder(null);
+        setSelectedQueueId(null);
+        setSelectedQueueNumber(null);
+        return;
+      }
+      setMessage('已叫下一號');
       await loadQueue();
+      setSelectedQueueId(data.id);
+      setSelectedQueueNumber(data.number);
       setOrder(null);
-      setSelectedQueueId(null);
-      setSelectedQueueNumber(null);
+      await loadOrder(data.id, data.number);
     } catch {
       setMessage('叫號失敗');
     }
@@ -47,6 +59,27 @@ export default function Staff() {
     } catch {
       setMessage('清空 queue 失敗');
       setConfirmClear(false);
+    }
+  }
+
+  async function updateQueueStatus(queueId, action) {
+    setActionLoadingId(queueId);
+    try {
+      const res = await fetch(`${API}/queue/${queueId}/${action}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${action} 失敗`);
+      await loadQueue();
+      if (action === 'skip' && selectedQueueId === queueId) {
+        setSelectedQueueId(null);
+        setSelectedQueueNumber(null);
+        setOrder(null);
+      } else if (selectedQueueId === queueId) {
+        setSelectedQueueNumber(data.number);
+      }
+    } catch (e) {
+      setMessage(e.message || '狀態更新失敗');
+    } finally {
+      setActionLoadingId(null);
     }
   }
 
@@ -77,7 +110,6 @@ export default function Staff() {
             <div className="topTitle">櫃台店員端</div>
             <div className="topSub">查看隊列與預點餐草稿，協助現場手寫點單</div>
           </div>
-          <div className="muted">顧客端：localhost:3000</div>
         </div>
 
         <div className="metrics">
@@ -92,8 +124,8 @@ export default function Staff() {
         </div>
 
         <div className="staffActions">
-          <button className="dangerBtn" onClick={callNext}>叫下一號</button>
-          <button className="clearBtn" onClick={() => setConfirmClear(true)}>清空今日 queue</button>
+          <button className="dangerBtn" onClick={callNext} disabled={isCallNextDisabled}>叫下一號</button>
+          <button className="clearBtn" onClick={() => setConfirmClear(true)}>清空今日列隊清單</button>
         </div>
         {message && <div className="card" style={{ color: '#92400e' }}>{message}</div>}
 
@@ -101,19 +133,39 @@ export default function Staff() {
           <div className="col">
             <h2 className="sectionTitle">隊列清單</h2>
             <div className="muted" style={{ marginBottom: 12 }}>點選號碼即可查看該客人的預點餐草稿。</div>
-            {queueData.queue.map((item) => (
-              <button key={item.id} className="queueItem" onClick={() => loadOrder(item.id, item.number)}>
-                <div className="queueTop">
-                  <span>號碼 {item.number}</span>
-                  <span className={`statusTag ${item.status}`}>{item.status === 'waiting' ? '等待中' : item.status === 'called' ? '已叫號' : '完成'}</span>
+            {queueData.queue.map((item) => {
+              const isCalled = item.status === 'called';
+              const actionDisabled = !isCalled || actionLoadingId === item.id;
+              return (
+                <div key={item.id} className="queueItem" onClick={() => loadOrder(item.id, item.number)}>
+                  <div className="queueInfo">
+                    <div className="queueTop">
+                      <span>號碼 {item.number}</span>
+                    </div>
+                    <div className="queueRow">
+                      <span className={`statusTag ${item.status}`}>{item.status === 'waiting' ? '等待中' : item.status === 'called' ? '已叫號' : item.status === 'skipped' ? '已過號' : item.status === 'seated' ? '已入座' : '完成'}</span>
+                    </div>
+                  </div>
+                  {isCalled && (
+                    <div className="queueActions">
+                      <button
+                        className="actionBtn skipBtn"
+                        disabled={actionDisabled}
+                        onClick={(e) => { e.stopPropagation(); updateQueueStatus(item.id, 'skip'); }}
+                      >過號</button>
+                      <button
+                        className="actionBtn seatBtn"
+                        disabled={actionDisabled}
+                        onClick={(e) => { e.stopPropagation(); updateQueueStatus(item.id, 'seat'); }}
+                      >確認入座</button>
+                    </div>
+                  )}
                 </div>
-                <div className="queueHint">按一下查看草稿</div>
-              </button>
-            ))}
+              );
+            })}
           </div>
 
           <div className="col">
-            <h2 className="sectionTitle">預點餐草稿</h2>
             {!selectedQueueId && <div className="muted">尚未選擇號碼。</div>}
             {selectedQueueId && !order && <div className="muted">這位客人尚未預點餐。</div>}
             {order && (
