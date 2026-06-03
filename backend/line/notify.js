@@ -41,7 +41,7 @@ async function pushToUser(lineUserId, messages) {
 }
 
 function formatOrderSummary(order) {
-  if (!order?.items?.length) return '（尚未預點餐）';
+  if (!order?.items?.length) return '（尚無預點餐項目）';
   const items = order.items;
   const maxLines = 5;
   const lines = items.slice(0, maxLines).map((item) => {
@@ -51,7 +51,7 @@ function formatOrderSummary(order) {
   if (items.length > maxLines) {
     lines.push(`…等 ${items.length} 項`);
   }
-  return `預點摘要：\n${lines.join('\n')}`;
+  return `預點餐摘要：\n${lines.join('\n')}`;
 }
 
 async function pushQueueTaken(queue, aheadCount) {
@@ -59,7 +59,7 @@ async function pushQueueTaken(queue, aheadCount) {
   const party = queue.partySize > 0 ? queue.partySize : 1;
   return pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `取號成功！\n你的號碼是 ${queue.number}（${party} 位）\n前方約 ${aheadCount} 組等候。\n\n輪到時會 LINE 通知。可輸入「我的號碼」或點選選單查詢狀態。\n\n${SKIP_RULE_SHORT}`
+    text: `【候位通知】取號成功\n\n您的號碼：${queue.number}（${party} 位）\n前方等候：約 ${aheadCount} 組\n\n輪到您的號碼時，我們將透過 LINE 通知您。\n您也可輸入「我的號碼」或點選選單查詢候位狀態。\n\n${SKIP_RULE_SHORT}`
   }]);
 }
 
@@ -69,7 +69,7 @@ async function pushCalled(queue, order = null) {
   const summary = formatOrderSummary(order);
   await pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `輪到你了！請前往櫃台。\n你的號碼是 ${queue.number}（${party} 位）。\n\n${SKIP_RULE_CALLED}\n\n${summary}`
+    text: `【叫號通知】輪到您了\n\n您的號碼：${queue.number}（${party} 位）\n請前往櫃台報到。\n\n${SKIP_RULE_CALLED}\n\n${summary}`
   }]);
 }
 
@@ -77,7 +77,7 @@ async function pushSkipped(queue) {
   if (!queue?.lineUserId) return;
   await pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `你的號碼 ${queue.number} 已過號（${SKIP_REASON_NOTE}）。\n若要繼續候位請重新取號，或向櫃台詢問。`
+    text: `【過號通知】\n\n您的號碼 ${queue.number} 已過號。\n原因：${SKIP_REASON_NOTE}\n\n如需繼續候位，請重新取號或洽詢櫃台人員。`
   }]);
 }
 
@@ -86,7 +86,7 @@ async function pushSeatedWelcome(queue) {
   const duration = SEATED_DURATION();
   await pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `已為你安排入座（號碼 ${queue.number}）。\n用餐時間約 ${duration} 分鐘，請留意 LINE 提醒。`
+    text: `【入座通知】\n\n已為您安排入座（號碼 ${queue.number}）。\n本次用餐時間約 ${duration} 分鐘，時間將近時我們會透過 LINE 提醒您。`
   }]);
 }
 
@@ -94,7 +94,7 @@ async function pushAlmostCalled(queue, aheadCount) {
   if (!queue?.lineUserId) return false;
   return pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `就快到了！你的號碼 ${queue.number} 前方約 ${aheadCount} 組，請留意叫號。\n${WAITING_STAY_HINT}\n${SKIP_RULE_SHORT}`
+    text: `【候位提醒】就快到您了\n\n您的號碼：${queue.number}\n前方等候：約 ${aheadCount} 組\n\n請留意叫號通知。\n${WAITING_STAY_HINT}\n\n${SKIP_RULE_SHORT}`
   }]);
 }
 
@@ -102,15 +102,54 @@ async function pushSeatedWarn(queue, minutesLeft) {
   if (!queue?.lineUserId) return false;
   return pushToUser(queue.lineUserId, [{
     type: 'text',
-    text: `用餐時間提醒：號碼 ${queue.number} 還剩約 ${minutesLeft} 分鐘。如需加點請洽店員。`
+    text: `【用餐時間提醒】\n\n號碼 ${queue.number} 的用餐時間剩餘約 ${minutesLeft} 分鐘。\n如需加點，歡迎洽詢服務人員。`
   }]);
 }
 
 function buildFeedbackIntroText(queue, { timeUp = false } = {}) {
   const prefix = timeUp
-    ? `用餐時間已到，感謝光臨！你的號碼是 ${queue.number}。`
-    : `感謝光臨！你的號碼是 ${queue.number}。`;
-  return `${prefix}\n\n請協助我們改進，約 1 分鐘完成問卷：\n① 整體 ② 等候 ③ 餐點 ④ 服務\n點選下方按鈕評分，完成後可留言（可略過）。`;
+    ? `用餐時間已到，感謝您的光臨！（號碼 ${queue.number}）`
+    : `感謝您的光臨！（號碼 ${queue.number}）`;
+  return `${prefix}\n\n誠摯邀請您協助填寫用餐體驗問卷（約 1 分鐘）：整體滿意度、等候體驗、餐點、服務\n\n請點選下方按鈕評分；完成後亦可留言分享建議（回覆「略過」可跳過）。`;
+}
+
+const FEEDBACK_FLEX_THEME = {
+  title: '#111827',
+  label: '#374151',
+  subtitle: '#6B7280',
+  hint: '#9CA3AF',
+  separator: '#E5E7EB',
+  bodyBg: '#FFFFFF'
+};
+
+function buildFlexSeparator() {
+  return {
+    type: 'box',
+    layout: 'vertical',
+    height: '1px',
+    backgroundColor: FEEDBACK_FLEX_THEME.separator,
+    margin: 'lg'
+  };
+}
+
+function buildFeedbackFlexHeader() {
+  return [
+    {
+      type: 'text',
+      text: '用餐體驗問卷',
+      weight: 'bold',
+      size: 'xl',
+      color: FEEDBACK_FLEX_THEME.title
+    },
+    {
+      type: 'text',
+      text: '請為以下四項各選一個評分',
+      size: 'xs',
+      color: FEEDBACK_FLEX_THEME.subtitle,
+      margin: 'sm'
+    },
+    buildFlexSeparator()
+  ];
 }
 
 function ratingButton(queueId, dim, rating, label, primary = false) {
@@ -118,6 +157,7 @@ function ratingButton(queueId, dim, rating, label, primary = false) {
     type: 'button',
     style: primary ? 'primary' : 'secondary',
     height: 'sm',
+    flex: 1,
     action: {
       type: 'postback',
       label,
@@ -127,14 +167,20 @@ function ratingButton(queueId, dim, rating, label, primary = false) {
   };
 }
 
-function buildDimensionRow(queueId, dim, dimLabel) {
+function buildDimensionRow(queueId, dim, dimLabel, { isFirst = false } = {}) {
   return {
     type: 'box',
     layout: 'vertical',
-    margin: 'md',
+    margin: isFirst ? 'lg' : 'md',
     spacing: 'xs',
     contents: [
-      { type: 'text', text: dimLabel, size: 'sm', weight: 'bold', color: '#333333' },
+      {
+        type: 'text',
+        text: dimLabel,
+        size: 'sm',
+        weight: 'bold',
+        color: FEEDBACK_FLEX_THEME.label
+      },
       {
         type: 'box',
         layout: 'horizontal',
@@ -149,33 +195,48 @@ function buildDimensionRow(queueId, dim, dimLabel) {
   };
 }
 
+const FEEDBACK_DIMENSIONS = [
+  ['overall', '整體滿意度'],
+  ['wait', '等候體驗'],
+  ['food', '餐點'],
+  ['service', '服務']
+];
+
 function buildFeedbackDimensionsFlex(queueId) {
-  const footerContents = [
-    buildDimensionRow(queueId, 'overall', '整體滿意度'),
-    buildDimensionRow(queueId, 'wait', '等候體驗'),
-    buildDimensionRow(queueId, 'food', '餐點'),
-    buildDimensionRow(queueId, 'service', '服務')
+  const bodyContents = [
+    ...buildFeedbackFlexHeader(),
+    ...FEEDBACK_DIMENSIONS.flatMap(([dim, label], index) => {
+      const items = [buildDimensionRow(queueId, dim, label, { isFirst: index === 0 })];
+      if (index < FEEDBACK_DIMENSIONS.length - 1) {
+        items.push(buildFlexSeparator());
+      }
+      return items;
+    }),
+    {
+      type: 'text',
+      text: '完成後可於聊天室留言，或回覆「略過」',
+      size: 'xxs',
+      color: FEEDBACK_FLEX_THEME.hint,
+      align: 'center',
+      wrap: true,
+      margin: 'xl'
+    }
   ];
 
   return {
     type: 'flex',
-    altText: '用餐體驗問卷：請為整體、等候、餐點、服務評分',
+    altText: '用餐體驗問卷｜請為整體、等候、餐點、服務評分',
     contents: {
       type: 'bubble',
       size: 'mega',
+      styles: {
+        body: { backgroundColor: FEEDBACK_FLEX_THEME.bodyBg }
+      },
       body: {
         type: 'box',
         layout: 'vertical',
-        contents: [
-          { type: 'text', text: '用餐體驗問卷', weight: 'bold', size: 'lg' },
-          { type: 'text', text: '每項請點選一個', size: 'xs', color: '#888888', margin: 'sm' }
-        ]
-      },
-      footer: {
-        type: 'box',
-        layout: 'vertical',
-        spacing: 'sm',
-        contents: footerContents
+        paddingAll: '20px',
+        contents: bodyContents
       }
     }
   };
@@ -216,5 +277,6 @@ module.exports = {
   buildFeedbackFlex,
   buildFeedbackIntroText,
   buildFeedbackDimensionsFlex,
+  FEEDBACK_FLEX_THEME,
   pushToUser
 };

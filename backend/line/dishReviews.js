@@ -45,18 +45,18 @@ async function getReviewReply(db, text) {
 
   const matches = findMenuItemsByQuery(query);
   if (!matches.length) {
-    return `找不到「${query}」相關菜色。\n請輸入「評論 菜名」，例如：評論 叉燒飯`;
+    return `查無「${query}」相關餐點。\n請輸入「評論 菜名」，例如：評論 叉燒飯`;
   }
 
   if (matches.length > 1) {
     const names = matches.slice(0, 5).map((m) => m.name).join('、');
-    return `找到多個菜色，請輸入更完整名稱：\n${names}`;
+    return `找到多道餐點，請輸入更完整名稱：\n${names}`;
   }
 
   const item = matches[0];
   const reviews = await fetchReviewsForItem(db, item.id, 3);
   if (!reviews.length) {
-    return `「${item.name}」目前沒有匯入評論。\n可在 LIFF 預點餐頁面查看菜單與更多資訊。`;
+    return `「${item.name}」目前尚無顧客評論。\n您可至預點餐頁面查看菜單與詳細資訊。`;
   }
 
   const lines = reviews.map((r, i) => {
@@ -64,11 +64,11 @@ async function getReviewReply(db, text) {
     return `${i + 1}. ${formatRating(r.rating)}｜${truncate(r.content)}\n   — ${who}`;
   });
 
-  return `「${item.name}」評論（最近 ${reviews.length} 則）：\n\n${lines.join('\n\n')}`;
+  return `「${item.name}」顧客評價（最近 ${reviews.length} 則）：\n\n${lines.join('\n\n')}`;
 }
 
 function getDishReviewHelpReply() {
-  return '查詢菜色評論請輸入：\n評論 菜名\n或：菜名 評論\n\n例如：評論 叉燒飯';
+  return '查詢餐點評價請輸入：\n・評論 菜名\n・菜名 評論\n\n例如：評論 叉燒飯';
 }
 
 module.exports = {

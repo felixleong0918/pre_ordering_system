@@ -98,13 +98,13 @@ async function getAwaitingCommentSession(db, lineUserId) {
 
 async function handleFeedbackPostback(db, { queueId, lineUserId, dim, rating }) {
   if (!VALID_DIMS.has(dim) || !VALID_RATINGS.has(rating)) {
-    return { reply: '無效的評分選項，請重新點選問卷按鈕。' };
+    return { reply: '評分選項無效，請重新點選問卷按鈕。' };
   }
 
   const queue = await db.get('SELECT * FROM queue WHERE id = ?', [queueId]);
   if (!queue) return { reply: '找不到對應的取號紀錄。' };
   if (queue.lineUserId && queue.lineUserId !== lineUserId) {
-    return { reply: '此回饋與你的帳號不符。' };
+    return { reply: '此回饋與您的帳號不符。' };
   }
 
   let row = await getFeedbackByQueueId(db, queueId);
@@ -136,18 +136,18 @@ async function handleFeedbackPostback(db, { queueId, lineUserId, dim, rating }) 
     const missing = ['overall', 'wait', 'food', 'service'].filter((d) => !hasValue(row[DIM_COLUMN[d]]));
     const missingLabels = missing.map(labelDim).join('、');
     return {
-      reply: `已記錄「${labelDim(dim)}」：${labelRating(rating)}。\n請繼續點選：${missingLabels}。`
+      reply: `已記錄「${labelDim(dim)}」：${labelRating(rating)}。\n請繼續完成：${missingLabels}。`
     };
   }
 
   if (!row.awaiting_comment) {
     await db.run('UPDATE feedback_responses SET awaiting_comment = 1 WHERE queueId = ?', [queueId]);
     return {
-      reply: '感謝評分！最後一步：請輸入意見或建議（直接打字即可），或回覆「略過」結束。'
+      reply: '感謝您的評分！最後一步：請輸入意見或建議，或回覆「略過」完成問卷。'
     };
   }
 
-  return { reply: '請輸入意見或回覆「略過」以完成回饋。' };
+  return { reply: '請輸入意見，或回覆「略過」以完成問卷。' };
 }
 
 async function handleFeedbackComment(db, { lineUserId, text }) {
@@ -160,7 +160,7 @@ async function handleFeedbackComment(db, { lineUserId, text }) {
       'UPDATE feedback_responses SET awaiting_comment = 0, comment = NULL WHERE id = ?',
       [session.id]
     );
-    return { reply: '感謝您的回饋，期待再次光臨！' };
+    return { reply: '感謝您的回饋，期待再次為您服務！' };
   }
 
   const comment = trimmed.slice(0, 500);
@@ -168,7 +168,7 @@ async function handleFeedbackComment(db, { lineUserId, text }) {
     'UPDATE feedback_responses SET comment = ?, awaiting_comment = 0 WHERE id = ?',
     [comment, session.id]
   );
-  return { reply: '感謝您的寶貴意見，我們會持續改進！' };
+  return { reply: '感謝您的寶貴意見，我們會持續改進，期待再次光臨！' };
 }
 
 /** @deprecated 相容舊單一 postback */

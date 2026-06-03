@@ -2,8 +2,8 @@ const { countWaitingAhead } = require('./queueHelpers');
 const { SKIP_RULE_SHORT, SKIP_RULE_CALLED } = require('./queueCopy');
 
 const STATUS_LABELS = {
-  waiting: '等待叫號中',
-  called: '輪到你了，請前往櫃台',
+  waiting: '等候叫號中',
+  called: '輪到您了，請前往櫃台',
   skipped: '已過號',
   seated: '已入座'
 };
@@ -25,13 +25,13 @@ async function getMyStatusReply(db, lineUserId) {
   const liffUrl = getLiffUrl();
 
   if (!queue) {
-    const hint = liffUrl ? `\n請掃描門口 QR 取號：\n${liffUrl}` : '\n請掃描門口 QR 線上取號。';
-    return `目前沒有進行中的候位。${hint}`;
+    const hint = liffUrl ? `\n請掃描門口 QR 取號：\n${liffUrl}` : '\n請掃描門口 QR 碼即可線上候位。';
+    return `目前沒有進行中的候位紀錄。${hint}`;
   }
 
   const party = queue.partySize > 0 ? queue.partySize : 1;
   const statusLabel = STATUS_LABELS[queue.status] || queue.status;
-  let text = `你的號碼：${queue.number}\n用餐人數：${party} 位\n狀態：${statusLabel}`;
+  let text = `【候位狀態】\n\n您的號碼：${queue.number}\n用餐人數：${party} 位\n狀態：${statusLabel}`;
 
   if (queue.status === 'waiting') {
     const ahead = await countWaitingAhead(db, queue.id);
@@ -43,7 +43,7 @@ async function getMyStatusReply(db, lineUserId) {
   }
 
   if (queue.status === 'skipped') {
-    text += '\n若要繼續候位請重新取號或洽櫃台。';
+    text += '\n如需繼續候位，請重新取號或洽詢櫃台人員。';
   }
 
   return text;

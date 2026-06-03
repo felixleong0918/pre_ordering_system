@@ -4,7 +4,7 @@ async function getWaitingCount(db) {
 }
 
 function formatWaitingReply(count) {
-  return `目前全店等候約 ${count} 組。掃描門口 QR 可線上取號。`;
+  return `目前全店等候約 ${count} 組。\n掃描門口 QR 碼即可線上取號候位。`;
 }
 
 const WAITING_KEYWORDS = ['等候', '候位', '幾組', '等待', '排隊', 'queue'];

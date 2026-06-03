@@ -49,7 +49,7 @@ async function handleEvent(db, event) {
       ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID || process.env.LIFF_ID}`
       : '門口 QR 碼';
     await replyMessage(event.replyToken,
-      `歡迎光臨香港鑫華茶餐廳！\n請掃描門口 QR 線上取號：\n${liffHint}\n\n可輸入「我的號碼」查候位，或「評論 菜名」看評論。\n也可點選下方選單「現場等候」查詢等候組數。`);
+      `歡迎加入香港鑫華茶餐廳官方帳號！\n\n線上候位請掃描門口 QR 碼：\n${liffHint}\n\n・輸入「我的號碼」查詢候位狀態\n・輸入「評論 菜名」查看餐點評價\n・點選選單「現場等候」查詢目前等候組數\n\n期待為您服務！`);
     return;
   }
 
