@@ -30,7 +30,7 @@ function collectButtons(node, out = []) {
 
 function collectSeparators(node, out = []) {
   if (!node || typeof node !== 'object') return out;
-  if (node.backgroundColor === FEEDBACK_FLEX_THEME.separator) out.push(node);
+  if (node.type === 'separator') out.push(node);
   for (const value of Object.values(node)) {
     if (Array.isArray(value)) value.forEach((item) => collectSeparators(item, out));
     else if (value && typeof value === 'object') collectSeparators(value, out);
@@ -87,7 +87,10 @@ describe('buildFeedbackDimensionsFlex', () => {
 
   test('includes separators and footer hint text', () => {
     const separators = collectSeparators(flex);
-    expect(separators.length).toBeGreaterThanOrEqual(3);
+    expect(separators).toHaveLength(4);
+    separators.forEach((sep) => {
+      expect(sep.color).toBe(FEEDBACK_FLEX_THEME.separator);
+    });
 
     const texts = collectTexts(flex);
     expect(texts).toContain('用餐體驗問卷');

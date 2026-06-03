@@ -124,11 +124,9 @@ const FEEDBACK_FLEX_THEME = {
 
 function buildFlexSeparator() {
   return {
-    type: 'box',
-    layout: 'vertical',
-    height: '1px',
-    backgroundColor: FEEDBACK_FLEX_THEME.separator,
-    margin: 'lg'
+    type: 'separator',
+    margin: 'lg',
+    color: FEEDBACK_FLEX_THEME.separator
   };
 }
 
