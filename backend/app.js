@@ -776,6 +776,94 @@ function createApp({ dbPath, disableTimers = false, disableNotify = false } = {}
     }
   });
 
+  app.get('/menu-items/:id/review-summary', async (req, res) => {
+    try {
+      const menuItemId = req.params.id;
+      const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+      const { apiKey, model } = getGeminiConfig();
+      const reviews = await allSql(
+        `SELECT id, menuItemId, dishName, reviewer, rating, content
+         FROM dish_reviews
+         WHERE menuItemId = ?
+         ORDER BY id DESC
+         LIMIT 20`,
+        [menuItemId]
+      );
+
+      if (!reviews.length) {
+        return res.json({
+          menuItemId,
+          name: menuItemId,
+          reviewCount: 0,
+          summary: '',
+          aiAvailable: Boolean(apiKey),
+          fromCache: false
+        });
+      }
+
+      let dishName = reviews[0].dishName || menuItemId;
+      try {
+        const menuItem = loadMenuItems().find((item) => item.id === menuItemId);
+        if (menuItem?.name) dishName = menuItem.name;
+      } catch (e) {
+        console.warn('loadMenuItems for review-summary', e.message || e);
+      }
+
+      const menuItem = { id: menuItemId, name: dishName };
+      const reviewsHash = hashReviewsForCache(reviews);
+
+      if (!forceRefresh) {
+        const cached = await getSql(
+          `SELECT summary, reviewCount, reviewsHash, model
+           FROM dish_review_summaries
+           WHERE menuItemId = ?`,
+          [menuItemId]
+        );
+        if (
+          cached &&
+          cached.reviewsHash === reviewsHash &&
+          cached.model === model &&
+          cached.summary &&
+          cached.summary !== '摘要產生失敗'
+        ) {
+          return res.json({
+            menuItemId,
+            name: dishName,
+            reviewCount: cached.reviewCount,
+            summary: cached.summary,
+            aiAvailable: Boolean(apiKey),
+            fromCache: true
+          });
+        }
+      }
+
+      const result = await summarizeDishReviews(menuItem, reviews);
+      if (result.summary && !result.error && result.summary !== '摘要產生失敗') {
+        await saveDishSummaryCache({
+          menuItemId,
+          dishName,
+          summary: result.summary,
+          reviewCount: reviews.length,
+          reviewsHash,
+          model
+        });
+      }
+
+      res.json({
+        menuItemId,
+        name: dishName,
+        reviewCount: reviews.length,
+        summary: result.summary || '',
+        aiAvailable: Boolean(apiKey),
+        error: result.error || null,
+        fromCache: false
+      });
+    } catch (e) {
+      console.error('menu-items/:id/review-summary', e);
+      res.status(500).json({ error: '整理餐點評論摘要失敗' });
+    }
+  });
+
   app.get('/menu-items/review-summaries', async (req, res) => {
     try {
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';

@@ -157,6 +157,17 @@ function parseRating(rating) {
   return Math.min(num, 5);
 }
 
+function sortReviewsByRatingDesc(reviews) {
+  return [...reviews].sort((a, b) => {
+    const ra = parseRating(a.rating);
+    const rb = parseRating(b.rating);
+    if (ra === null && rb === null) return 0;
+    if (ra === null) return 1;
+    if (rb === null) return -1;
+    return rb - ra;
+  });
+}
+
 function StarRating({ rating }) {
   // rating 可能是數字或字串如 "5" 或 "4/5"，先嘗試解析
   const num = parseRating(rating);
@@ -210,7 +221,16 @@ export default function Menu() {
   const [savedSummary, setSavedSummary] = useState('');
   const [activePage, setActivePage] = useState(pages[0]);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [reviewModal, setReviewModal] = useState({ open: false, item: null, loading: false, reviews: [], error: '' });
+  const [reviewModal, setReviewModal] = useState({
+    open: false,
+    item: null,
+    loading: false,
+    reviews: [],
+    error: '',
+    summary: '',
+    summaryLoading: false,
+    summaryError: ''
+  });
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedSnapshot, setSubmittedSnapshot] = useState({});
   const pageSectionRefs = useRef({});
@@ -432,19 +452,96 @@ export default function Menu() {
     );
   }
 
+  const emptyReviewModal = {
+    open: false,
+    item: null,
+    loading: false,
+    reviews: [],
+    error: '',
+    summary: '',
+    summaryLoading: false,
+    summaryError: ''
+  };
+
+  async function loadReviewSummary(item) {
+    setReviewModal((prev) => ({ ...prev, summaryLoading: true, summary: '', summaryError: '' }));
+    try {
+      const res = await fetch(`${API}/menu-items/${encodeURIComponent(item.id)}/review-summary`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '整理評論失敗');
+      const summary = String(data.summary || '').trim();
+      const validSummary = summary && summary !== '摘要產生失敗' ? summary : '';
+      setReviewModal((prev) => ({
+        ...prev,
+        summaryLoading: false,
+        summary: validSummary,
+        summaryError: data.aiAvailable === false
+          ? 'AI 摘要服務尚未設定，僅顯示原始評論。'
+          : (!validSummary && data.reviewCount > 0 ? '暫時無法產生評論整理，請直接參考下方留言。' : '')
+      }));
+    } catch {
+      setReviewModal((prev) => ({
+        ...prev,
+        summaryLoading: false,
+        summary: '',
+        summaryError: '無法整理評論摘要，請直接參考下方留言。'
+      }));
+    }
+  }
+
   async function openReviews(item) {
-    setReviewModal({ open: true, item, loading: true, reviews: [], error: '' });
+    setReviewModal({
+      open: true,
+      item,
+      loading: true,
+      reviews: [],
+      error: '',
+      summary: '',
+      summaryLoading: false,
+      summaryError: ''
+    });
     if (!API) {
-      setReviewModal({ open: true, item, loading: false, reviews: [], error: '目前尚未設定後端 API 網址。' });
+      setReviewModal({
+        open: true,
+        item,
+        loading: false,
+        reviews: [],
+        error: '目前尚未設定後端 API 網址。',
+        summary: '',
+        summaryLoading: false,
+        summaryError: ''
+      });
       return;
     }
     try {
       const res = await fetch(`${API}/menu-items/${encodeURIComponent(item.id)}/reviews?limit=20`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '取得評論失敗');
-      setReviewModal({ open: true, item, loading: false, reviews: data.reviews || [], error: '' });
+      const reviews = sortReviewsByRatingDesc(data.reviews || []);
+      setReviewModal({
+        open: true,
+        item,
+        loading: false,
+        reviews,
+        error: '',
+        summary: '',
+        summaryLoading: false,
+        summaryError: ''
+      });
+      if (reviews.length > 0) {
+        loadReviewSummary(item);
+      }
     } catch {
-      setReviewModal({ open: true, item, loading: false, reviews: [], error: '目前無法載入這道菜的評論。' });
+      setReviewModal({
+        open: true,
+        item,
+        loading: false,
+        reviews: [],
+        error: '目前無法載入這道菜的評論。',
+        summary: '',
+        summaryLoading: false,
+        summaryError: ''
+      });
     }
   }
 
@@ -650,14 +747,39 @@ export default function Menu() {
                 <div className="sectionText">目前 Google 評論裡還沒有明確提到這道菜。</div>
               )}
               {!reviewModal.loading && reviewModal.reviews.length > 0 && (
-                <div style={{ maxHeight: 360, overflow: 'auto', marginTop: 8 }}>
-                  {reviewModal.reviews.map((review, idx) => (
-                    <ReviewCard key={`${review.reviewer || 'guest'}-${idx}`} review={review} />
-                  ))}
-                </div>
+                <>
+                  {(reviewModal.summaryLoading || reviewModal.summary || reviewModal.summaryError) && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        marginBottom: 12,
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        background: '#fff7ed',
+                        border: '1px solid #fed7aa'
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>評論整理</div>
+                      {reviewModal.summaryLoading && (
+                        <div className="sectionText" style={{ margin: 0 }}>正在用 AI 整理評論...</div>
+                      )}
+                      {!reviewModal.summaryLoading && reviewModal.summaryError && (
+                        <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>{reviewModal.summaryError}</div>
+                      )}
+                      {!reviewModal.summaryLoading && reviewModal.summary && (
+                        <div style={{ fontSize: 14, lineHeight: 1.7, color: '#374151' }}>{reviewModal.summary}</div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ maxHeight: 360, overflow: 'auto', marginTop: 8 }}>
+                    {reviewModal.reviews.map((review, idx) => (
+                      <ReviewCard key={`${review.reviewer || 'guest'}-${idx}`} review={review} />
+                    ))}
+                  </div>
+                </>
               )}
               <div className="modalActions" style={{ gridTemplateColumns: '1fr' }}>
-                <button type="button" className="orangeBtn modalBtn" onClick={() => setReviewModal({ open: false, item: null, loading: false, reviews: [], error: '' })}>關閉</button>
+                <button type="button" className="orangeBtn modalBtn" onClick={() => setReviewModal(emptyReviewModal)}>關閉</button>
               </div>
             </div>
           </div>
