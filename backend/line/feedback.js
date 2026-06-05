@@ -207,7 +207,12 @@ async function saveFeedback(db, { queueId, lineUserId, rating }) {
 }
 
 function toMessages(payload) {
-  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload)) {
+    return payload.map((item) => {
+      if (item && typeof item === 'object' && item.type) return item;
+      return { type: 'text', text: String(item) };
+    });
+  }
   return [{ type: 'text', text: String(payload) }];
 }
 
@@ -247,6 +252,7 @@ module.exports = {
   handleFeedbackComment,
   getAwaitingCommentSession,
   saveFeedback,
+  toMessages,
   replyMessage,
   formatFeedbackItem,
   buildFeedbackSummary,
