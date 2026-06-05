@@ -159,8 +159,7 @@ function ratingButton(queueId, dim, rating, label, primary = false) {
     action: {
       type: 'postback',
       label,
-      data: `action=feedback&queueId=${queueId}&dim=${dim}&rating=${rating}`,
-      displayText: `${label}`
+      data: `action=feedback&queueId=${queueId}&dim=${dim}&rating=${rating}`
     }
   };
 }

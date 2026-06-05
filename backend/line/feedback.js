@@ -1,5 +1,8 @@
 const { getClient } = require('./client');
-const { labelRating, labelDim } = require('./feedbackLabels');
+const { labelRating, labelDim, RATING_LABELS } = require('./feedbackLabels');
+
+/** 評分按鈕 displayText 殘留訊息，不可當成留言 */
+const RATING_LABEL_TEXTS = new Set(Object.values(RATING_LABELS));
 const { buildGoogleReviewInviteFlex } = require('./googleReviewInvite');
 
 const VALID_RATINGS = new Set(['good', 'ok', 'bad']);
@@ -173,6 +176,8 @@ async function handleFeedbackComment(db, { lineUserId, text }) {
   if (!session) return null;
 
   const trimmed = text.trim();
+  if (RATING_LABEL_TEXTS.has(trimmed)) return null;
+
   if (SKIP_COMMENT_WORDS.has(trimmed)) {
     await db.run(
       'UPDATE feedback_responses SET awaiting_comment = 0, comment = NULL WHERE id = ?',
