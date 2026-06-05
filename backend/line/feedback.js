@@ -1,5 +1,6 @@
 const { getClient } = require('./client');
 const { labelRating, labelDim } = require('./feedbackLabels');
+const { buildGoogleReviewInviteFlex } = require('./googleReviewInvite');
 
 const VALID_RATINGS = new Set(['good', 'ok', 'bad']);
 const VALID_DIMS = new Set(['overall', 'wait', 'food', 'service']);
@@ -83,6 +84,23 @@ function isFeedbackFinished(row) {
   return isFeedbackComplete(row) && !row.awaiting_comment;
 }
 
+function isHighSatisfaction(row) {
+  if (!isFeedbackComplete(row)) return false;
+  if (row.rating !== 'good') return false;
+  return [row.rating_wait, row.rating_food, row.rating_service]
+    .every((v) => v !== 'bad');
+}
+
+function buildFinishReply(row) {
+  const thankYou = row.comment
+    ? '感謝您的寶貴意見，我們會持續改進，期待再次光臨！'
+    : '感謝您的回饋，期待再次為您服務！';
+  if (isHighSatisfaction(row)) {
+    return [thankYou, buildGoogleReviewInviteFlex()];
+  }
+  return thankYou;
+}
+
 async function getFeedbackByQueueId(db, queueId) {
   return db.get('SELECT * FROM feedback_responses WHERE queueId = ?', [queueId]);
 }
@@ -160,7 +178,8 @@ async function handleFeedbackComment(db, { lineUserId, text }) {
       'UPDATE feedback_responses SET awaiting_comment = 0, comment = NULL WHERE id = ?',
       [session.id]
     );
-    return { reply: '感謝您的回饋，期待再次為您服務！' };
+    const row = await db.get('SELECT * FROM feedback_responses WHERE id = ?', [session.id]);
+    return { reply: buildFinishReply(row) };
   }
 
   const comment = trimmed.slice(0, 500);
@@ -168,7 +187,8 @@ async function handleFeedbackComment(db, { lineUserId, text }) {
     'UPDATE feedback_responses SET comment = ?, awaiting_comment = 0 WHERE id = ?',
     [comment, session.id]
   );
-  return { reply: '感謝您的寶貴意見，我們會持續改進，期待再次光臨！' };
+  const row = await db.get('SELECT * FROM feedback_responses WHERE id = ?', [session.id]);
+  return { reply: buildFinishReply(row) };
 }
 
 /** @deprecated 相容舊單一 postback */
@@ -227,6 +247,8 @@ module.exports = {
   buildFeedbackSummary,
   isFeedbackComplete,
   isFeedbackFinished,
+  isHighSatisfaction,
+  buildFinishReply,
   DIM_FIELDS,
   labelRating,
   labelDim
